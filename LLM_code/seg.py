@@ -5,6 +5,7 @@ from torch import Tensor
 import openmind
 import torch
 import argparse
+import time
 
 # Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(model_output, attention_mask):
@@ -32,6 +33,7 @@ def main():
     else:
         device = "cpu"
         
+    start_time = time.time()
     # Load model from HuggingFace Hub
     tokenizer = AutoTokenizer.from_pretrained(model_path,trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
@@ -46,6 +48,8 @@ def main():
     sentence_embeddings = mean_pooling(model_output, encoded_input['attention_mask'])
     print("Sentence embeddings:")
     print(sentence_embeddings)
+    end_time = time.time()
+    print(f"硬件环境：{device}推理执行时间：{end_time - start_time}秒")
     
 if __name__ == "__main__":
     main()
