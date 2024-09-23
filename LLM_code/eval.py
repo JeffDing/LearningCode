@@ -4,6 +4,7 @@ from openmind import AutoTokenizer, AutoModel
 import torch
 import sys
 import argparse
+import time
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -11,12 +12,13 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to model",
-        default="models/all_datasets_v3_mpnet-base",
+        default="models/ChatLaw-Text2Vec",
     )
     args = parser.parse_args()
     return args
 
 def evaluate_on_device(model_path, input_texts, device):
+    start_time = time.time()
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
     # Tokenize the input texts
@@ -25,6 +27,8 @@ def evaluate_on_device(model_path, input_texts, device):
     embeddings =outputs.last_hidden_state[:,0]
     #(Optionally)normalizeembeddings
     embeddings =F.normalize(embeddings, p=2, dim=1)
+    end_time = time.time()
+    print(f"硬件环境：{device}上推理执行时间：{end_time - start_time}秒")
     return embeddings
 
 args = parse_args()
