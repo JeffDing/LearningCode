@@ -1,6 +1,7 @@
 import torch
 from openmind import AutoTokenizer, AutoModelForCausalLM, is_torch_npu_available
 import argparse
+import time
 
 def parse_args():
     parser = argparse.ArgumentParser()
@@ -22,6 +23,7 @@ def main():
     else:
         device = "cpu"
         
+    start_time = time.time()
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     # Set `torch_dtype=torch.float16` to load model in float16, otherwise it will be loaded as float32 and might cause OOM Error.
     model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.float16, trust_remote_code=True).to(device)
@@ -33,6 +35,8 @@ def main():
     output = model.generate(**inputs, **gen_kwargs)
     output = tokenizer.decode(output[0].tolist(), skip_special_tokens=True)
     print(output)
+    end_time = time.time()
+    print(f"硬件环境：{device}推理执行时间：{end_time - start_time}秒")
 
 if __name__ == "__main__":
     main()
