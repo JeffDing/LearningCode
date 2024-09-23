@@ -23,7 +23,7 @@ def main():
         device = "npu:0"
     else:
         device = "cpu"
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
     model = model.to(device)
     prompt = "Give me a short introduction to large language model."
