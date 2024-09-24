@@ -32,7 +32,7 @@ def main():
     inputs = tokenizer(["简单介绍一下上海这座城市"], return_tensors="pt")
     for k,v in inputs.items():
         inputs[k] = v.to(device)
-    gen_kwargs = {"max_length": 1000, "top_p": 0.8, "temperature": 0.8, "do_sample": True, "repetition_penalty": 1.0}
+    gen_kwargs = {"max_length": 128, "top_p": 0.8, "temperature": 0.8, "do_sample": True, "repetition_penalty": 1.0}
     output = model.generate(**inputs, **gen_kwargs)
     output = tokenizer.decode(output[0].tolist(), skip_special_tokens=True)
     print(output)
