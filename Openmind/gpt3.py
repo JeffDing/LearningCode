@@ -89,7 +89,7 @@ def main():
         print(reconstruction)
     
     end_time = time.time()
-    print(f"硬件环境：{device}推理执行时间：{end_time - start_time}秒")
+    print(f"硬件环境：{device},推理执行时间：{end_time - start_time}秒")
     
 if __name__ == "__main__":
     main()

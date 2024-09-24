@@ -1,7 +1,10 @@
-from openmind import AutoTokenizer, AutoModelForCausalLM, is_torch_npu_available
+from openmind import pipeline, is_torch_npu_available
+from openmind import AutoTokenizer, AutoModelForCausalLM
 from openmind_hub import snapshot_download
 import torch.nn.functional as F
 from torch import Tensor
+import openmind
+import torch
 import argparse
 import time
 
@@ -11,7 +14,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to model",
-        default="jeffding/TinyLLama-v0-openmind",
+        default="models/roberta-base-go_emotions",
     )
     args = parser.parse_args()
     return args
@@ -24,16 +27,14 @@ def main():
         device = "npu:0"
     else:
         device = "cpu"
-    tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
-    model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
-    model = model.to(device)
     
     start_time = time.time()
-    prompt = "Give me a short introduction to large language model."
-    inputs = tokenizer(prompt, return_tensors="pt", return_token_type_ids=False).to(device)
-    out = model.generate(**inputs, max_new_tokens=80).ravel()
-    out = tokenizer.decode(out)
-    print(out)
+    classifier = pipeline(task="text-classification", model=model_path, top_k=None, device=device)
+
+    sentences = ["I am not having a great day"]
+
+    model_outputs = classifier(sentences)
+    print(model_outputs[0])
     
     end_time = time.time()
     print(f"硬件环境：{device},推理执行时间：{end_time - start_time}秒")

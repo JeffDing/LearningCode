@@ -12,7 +12,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to model",
-        default="models/ChatLaw-Text2Vec",
+        default="models/bge-reranker-v2-m3",
     )
     args = parser.parse_args()
     return args
@@ -20,6 +20,7 @@ def parse_args():
 def evaluate_on_device(model_path, input_texts, device):
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
+    
     start_time = time.time()
     # Tokenize the input texts
     batch_dict = tokenizer(input_texts, max_length=512, padding=True, truncation=True, return_tensors='pt').to(device)
@@ -34,10 +35,7 @@ def evaluate_on_device(model_path, input_texts, device):
 args = parse_args()
 model_path = args.model_name_or_path
   
-input_texts =[
-"what is the capital of china?"
-"how to implement quick sort in python?"
-]
+input_texts =["Hello, my dog is cute."]
 #Evaluate on CPU
 cpu_embeddings =evaluate_on_device(model_path,input_texts,"cpu")
 
@@ -53,6 +51,6 @@ if torch.npu.is_available():
     # Calculate the cosine similarity between CPu and NPu embeddings
     
     cosine_similarity =F.cosine_similarity(cpu_embeddings_on_npu, npu_embeddings, dim=1)
-    print(f"cosine similarity between CPU and NPU embeddings: {cosine_similarity}")
+    print(f"Cosine Similarity Between CPU and NPU embeddings: {cosine_similarity}")
 else:
     print("NPU is not available.")

@@ -36,8 +36,9 @@ def main():
     pipe = pipeline("text-generation", model=model, tokenizer=tokenizer,device=device)
     generated_text = pipe(text, max_length=50, do_sample=False, no_repeat_ngram_size=2)[0]
     print(generated_text['generated_text'])
+    
     end_time = time.time()
-    print(f"推理执行时间：{end_time - start_time}秒")
+    print(f"硬件环境：{device},推理执行时间：{end_time - start_time}秒")
     
 if __name__ == "__main__":
     main()
