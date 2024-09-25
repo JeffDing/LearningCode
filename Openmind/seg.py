@@ -36,7 +36,6 @@ def main():
     # Load model from HuggingFace Hub
     tokenizer = AutoTokenizer.from_pretrained(model_path,trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
-    
     start_time = time.time()
     sentences = ['如何更换花呗绑定银行卡', 'How to replace the Huabei bundled bank card']
     # Tokenize sentences

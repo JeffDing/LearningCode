@@ -1,5 +1,6 @@
 import torch
-from openmind import AutoTokenizer, AutoModelForCausalLM, is_torch_npu_available
+from openmind import AutoTokenizer, AutoModelForCausalLM, is_torch_npu_available.
+from openmind_hub import snapshot_download
 import argparse
 import time
 
@@ -26,13 +27,12 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     # Set `torch_dtype=torch.float16` to load model in float16, otherwise it will be loaded as float32 and might cause OOM Error.
     model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.float16, trust_remote_code=True).to(device)
-    model = model.eval()
-    
     start_time = time.time()
+    model = model.eval()
     inputs = tokenizer(["简单介绍一下上海这座城市"], return_tensors="pt")
     for k,v in inputs.items():
         inputs[k] = v.to(device)
-    gen_kwargs = {"max_length": 128, "top_p": 0.8, "temperature": 0.8, "do_sample": True, "repetition_penalty": 1.0}
+    gen_kwargs = {"max_length": 1000, "top_p": 0.8, "temperature": 0.8, "do_sample": True, "repetition_penalty": 1.0}
     output = model.generate(**inputs, **gen_kwargs)
     output = tokenizer.decode(output[0].tolist(), skip_special_tokens=True)
     print(output)

@@ -27,8 +27,8 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
     model = model.to(device)
-    
     start_time = time.time()
+    
     prompt = "Give me a short introduction to large language model."
     inputs = tokenizer(prompt, return_tensors="pt", return_token_type_ids=False).to(device)
     out = model.generate(**inputs, max_new_tokens=80).ravel()

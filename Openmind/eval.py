@@ -20,7 +20,6 @@ def parse_args():
 def evaluate_on_device(model_path, input_texts, device):
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
-    
     start_time = time.time()
     # Tokenize the input texts
     batch_dict = tokenizer(input_texts, max_length=512, padding=True, truncation=True, return_tensors='pt').to(device)
