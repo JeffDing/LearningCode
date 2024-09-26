@@ -27,6 +27,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     # Set `torch_dtype=torch.float16` to load model in float16, otherwise it will be loaded as float32 and might cause OOM Error.
     model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.float16, trust_remote_code=True).to(device)
+    
     start_time = time.time()
     model = model.eval()
     inputs = tokenizer(["简单介绍一下上海这座城市"], return_tensors="pt")
