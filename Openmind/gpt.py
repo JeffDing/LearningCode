@@ -27,6 +27,7 @@ def main():
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True)
     model = model.to(device)
+    
     start_time = time.time()
     
     prompt = "Give me a short introduction to large language model."
