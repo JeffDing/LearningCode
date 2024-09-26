@@ -1,4 +1,4 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline, is_torch_npu_available
+from openmind import AutoModelForCausalLM, AutoTokenizer, pipeline, is_torch_npu_available
 from openmind_hub import snapshot_download
 import torch
 
