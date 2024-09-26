@@ -1,5 +1,5 @@
 import torch
-from openmind import AutoTokenizer, AutoModelForCausalLM, is_torch_npu_available.
+from openmind import AutoTokenizer, AutoModelForCausalLM, is_torch_npu_available
 from openmind_hub import snapshot_download
 import argparse
 import time
