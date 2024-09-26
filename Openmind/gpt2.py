@@ -29,6 +29,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(model_path, torch_dtype=torch.float16, trust_remote_code=True).to(device)
     
     start_time = time.time()
+    
     model = model.eval()
     inputs = tokenizer(["简单介绍一下上海这座城市"], return_tensors="pt")
     for k,v in inputs.items():
