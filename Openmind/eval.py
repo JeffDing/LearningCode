@@ -12,7 +12,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to model",
-        default="models/bge-reranker-v2-m3",
+        default="model/llama2-7b-hf",
     )
     args = parser.parse_args()
     return args
@@ -20,6 +20,8 @@ def parse_args():
 def evaluate_on_device(model_path, input_texts, device):
     tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
     model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
+    tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+                                 
     start_time = time.time()
     # Tokenize the input texts
     batch_dict = tokenizer(input_texts, max_length=512, padding=True, truncation=True, return_tensors='pt').to(device)
@@ -34,16 +36,16 @@ def evaluate_on_device(model_path, input_texts, device):
 args = parse_args()
 model_path = args.model_name_or_path
   
-input_texts =["Hello, my dog is cute."]
+input_texts =["Give me a short introduction to large language model."]
 #Evaluate on CPU
 cpu_embeddings =evaluate_on_device(model_path,input_texts,"cpu")
 
-# print(f"CPU Embeddings:fcpu embeddings}")
+print(f"CPU Embeddings:{cpu_embeddings}")
 # Evaluate on NPu if available
 if torch.npu.is_available():
     npu_embeddings=evaluate_on_device(model_path, input_texts,"npu:0")
     
-    # print(f"NPU Embeddings:fnpu embeddings}")
+    print(f"NPU Embeddings:{npu_embeddings}")
     #Move CPu embeddings to NPU
     cpu_embeddings_on_npu=cpu_embeddings.to("npu:0")
 
