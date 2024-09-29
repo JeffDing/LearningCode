@@ -11,7 +11,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to model",
-        default="models/Mistral-7B-Instruct-v0.3",
+        default="models/mega-ar-525m-v0.07-ultraTBfw",
     )
     args = parser.parse_args()
     return args
@@ -29,7 +29,7 @@ def main():
     model = AutoModelForCausalLM.from_pretrained(model_path,
                                              device_map=device,
                                              trust_remote_code=False,
-                                             revision="main")
+                                             revision="main").to(device)
     tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True,trust_remote_code=False)
     
     start_time = time.time()
@@ -57,7 +57,8 @@ def main():
         temperature=0.7,
         top_p=0.95,
         top_k=40,
-        repetition_penalty=1.1
+        repetition_penalty=1.1,
+        device=device
     )
 
     print(pipe(prompt_template)[0]['generated_text'])
