@@ -39,7 +39,7 @@ def main():
                                              trust_remote_code=False,
                                              revision="main")
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_path, use_fast=True)
     
     start_time = time.time()
     prompt = "Tell me about AI"
