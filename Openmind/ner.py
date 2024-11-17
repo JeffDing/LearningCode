@@ -1,4 +1,5 @@
-from openmind import pipeline, is_torch_npu_available
+from openmind import pipeline, AutoTokenizer, is_torch_npu_available
+from transformers import AutoModelForTokenClassification
 from openmind_hub import snapshot_download
 import torch.nn.functional as F
 from torch import Tensor
@@ -13,7 +14,7 @@ def parse_args():
         "--model_name_or_path",
         type=str,
         help="Path to model",
-        default="models/camembert-ner",
+        default="models/bert-fa-base-uncased-ner-arman",
     )
     args = parser.parse_args()
     return args
