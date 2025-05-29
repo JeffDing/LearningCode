@@ -70,4 +70,5 @@ def get_all_pdfs(url, folder_path='pdf_files'):
 if __name__ == "__main__":
     # 使用示例
     target_url = input("请输入要爬取的网页URL: ").strip()
-    get_all_pdfs(target_url)
+    folder_path = input("请输入文件夹名字:").strip()
+    get_all_pdfs(target_url,folder_path)
