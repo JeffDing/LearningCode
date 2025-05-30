@@ -7,8 +7,8 @@ target_categories = {
     "gr-qc", "hep-ph", "hep-th", "quant-ph"
 }
 
-input_path = "----"#原数据路径
-output_path = "----"  # 使用 JSON Lines 格式输出路径
+input_path = "/root/dataset/arxiv-metadata-oai-snapshot.json"#原数据路径
+output_path = "/root/dataset/arxiv.jsonl"  # 使用 JSON Lines 格式输出路径
 
 count = 0
 

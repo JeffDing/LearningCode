@@ -1,7 +1,7 @@
 import json
 
-input_path = "--------"#刚刚随机抽样的数据
-output_path = "--------"
+input_path = "/root/dataset/arxiv_random.jsonl"#刚刚随机抽样的数据
+output_path = "/root/dataset/arxiv_dataset.jsonl"
 
 count = 0
 skipped = 0

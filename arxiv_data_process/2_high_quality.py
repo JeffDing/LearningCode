@@ -1,7 +1,7 @@
 import json
 
-input_path = "----"          # 上一步筛选后的数据
-output_path = "----"  # 输出高质量数据
+input_path = "/root/dataset/arxiv.jsonl"          # 上一步筛选后的数据
+output_path = "/root/dataset/arxiv_high.jsonl"  # 输出高质量数据
 
 count = 0
 

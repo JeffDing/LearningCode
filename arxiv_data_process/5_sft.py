@@ -1,8 +1,8 @@
 import json
 import random
 
-input_file = "---------"   # 20000条原始数据文件路径
-output_file = "----------"
+input_file = "/root/dataset/arxiv_random.jsonl"   # 20000条原始数据文件路径
+output_file = "/root/dataset/arxiv_sft.jsonl"
 
 # 类别对应选项映射
 label_map = {
@@ -29,7 +29,7 @@ with open(input_file, 'r', encoding='utf-8') as f:
 
 # 随机抽样1000条
 random.seed(42)
-sampled = random.sample(data, 1000)
+sampled = random.sample(data, 5000)
 
 with open(output_file, 'w', encoding='utf-8') as f_out:
     count = 0

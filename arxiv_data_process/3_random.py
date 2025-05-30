@@ -1,8 +1,8 @@
 import json
 import random
 
-input_path = "----------"
-output_path = "----------"
+input_path = "/root/dataset/arxiv_high.jsonl"
+output_path = "/root/dataset/arxiv_random.jsonl"
 sample_size = 20000  # 你可以改成 10000 等其他数字
 
 # 先将所有数据加载到内存中（30万条可以接受）
