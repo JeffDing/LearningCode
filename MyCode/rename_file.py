@@ -33,5 +33,5 @@ def rename_file(folder_path,old_file_name):
 if __name__ == "__main__":
     # 使用示例
     folder_path = input("请输入文件夹名字:").strip()
-    file_name = input("请文件夹前缀: ").strip()
-    rename_file(folder_path,file_name)
+    old_file_name = input("请文件夹前缀: ").strip()
+    rename_file(folder_path,old_file_name)
