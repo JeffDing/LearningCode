@@ -446,19 +446,267 @@ class HardwareInfoCollector:
         return info
 
     def get_gpu_info(self) -> List[Dict[str, str]]:
-        """获取GPU信息"""
+        """获取GPU信息，包括国产GPGPU"""
         print("正在获取GPU信息...")
 
         gpus = []
+        seen_models = set()  # 用于去重
 
-        # 方法1: 使用lspci (Linux)
+        # ============ 国产GPGPU检测 ============
+        # 注意：华为昇腾是NPU设备，不在GPGPU中显示，请在NPU信息中查看
+
+        # 方法1: 摩尔线程 (Moore Threads) - 使用musa-smi
+        try:
+            result = subprocess.run(['musa-smi'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                output = result.stdout
+
+                # 解析摩尔线程GPU信息
+                # 匹配类似 "MTT S80" 的型号
+                model_pattern = re.compile(r'MTT\s+\S+', re.IGNORECASE)
+                models = model_pattern.findall(output)
+
+                for model in models:
+                    model_key = f"摩尔线程-{model}"
+                    if model_key not in seen_models:
+                        gpu = {
+                            "厂商": "摩尔线程",
+                            "型号": model,
+                            "类型": "GPGPU"
+                        }
+                        gpus.append(gpu)
+                        seen_models.add(model_key)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # 方法2: 壁仞科技 - 使用br-smi
+        try:
+            result = subprocess.run(['br-smi', '-q'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                output = result.stdout
+
+                # 解析壁仞GPU信息
+                # 匹配类似 "BR100" 等型号
+                model_pattern = re.compile(r'BR\d+', re.IGNORECASE)
+                models = model_pattern.findall(output)
+
+                for model in models:
+                    model_key = f"壁仞科技-{model}"
+                    if model_key not in seen_models:
+                        gpu = {
+                            "厂商": "壁仞科技",
+                            "型号": model,
+                            "类型": "GPGPU"
+                        }
+                        gpus.append(gpu)
+                        seen_models.add(model_key)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # 方法3: 沐曦 - 使用mx-smi或mx-smi info
+        try:
+            result = subprocess.run(['mx-smi'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                output = result.stdout
+
+                # 解析沐曦GPU信息
+                # 匹配类似 "C500" 等型号
+                model_pattern = re.compile(r'[A-Z]\d+', re.IGNORECASE)
+                models = model_pattern.findall(output)
+
+                for model in models:
+                    model_key = f"沐曦-{model}"
+                    if model_key not in seen_models:
+                        gpu = {
+                            "厂商": "沐曦",
+                            "型号": model,
+                            "类型": "GPGPU"
+                        }
+                        gpus.append(gpu)
+                        seen_models.add(model_key)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # 方法4: 天数智芯 - 使用iluvatar-smi
+        try:
+            result = subprocess.run(['iluvatar-smi', '-q'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                output = result.stdout
+
+                # 解析天数智芯GPU信息
+                # 匹配类似 "BI150" 等型号
+                model_pattern = re.compile(r'BI\d+', re.IGNORECASE)
+                models = model_pattern.findall(output)
+
+                for model in models:
+                    model_key = f"天数智芯-{model}"
+                    if model_key not in seen_models:
+                        gpu = {
+                            "厂商": "天数智芯",
+                            "型号": model,
+                            "类型": "GPGPU"
+                        }
+                        gpus.append(gpu)
+                        seen_models.add(model_key)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # 方法5: 海光 - 使用dcgmi
+        try:
+            result = subprocess.run(['dcgmi', 'diag', '-r'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                output = result.stdout
+
+                # 解析海光GPU信息
+                if "海光" in output or "Hygon" in output:
+                    model_key = "海光-GPGPU"
+                    if model_key not in seen_models:
+                        gpu = {
+                            "厂商": "海光",
+                            "型号": "海光GPGPU",
+                            "类型": "GPGPU"
+                        }
+                        gpus.append(gpu)
+                        seen_models.add(model_key)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # 方法6: 使用lspci检测国产GPU (Linux)
         try:
             result = subprocess.run(['lspci', '-nn', '-d', '::0300'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 lines = result.stdout.strip().split('\n')
-                for i, line in enumerate(lines):
-                    if 'VGA' in line or '3D' in line:
+                for line in lines:
+                    vendor = "未知"
+                    model = "未知"
+
+                    line_upper = line.upper()
+
+                    # 检测国产GPU厂商
+                    if "MOORE THREADS" in line_upper or "摩尔线程" in line:
+                        vendor = "摩尔线程"
+                        model_match = re.search(r'MTT\s+\S+', line, re.IGNORECASE)
+                        if model_match:
+                            model = model_match.group(0)
+                        else:
+                            model = "摩尔线程GPU"
+
+                    elif "BR" in line_upper and "BIRENTECH" not in line_upper:
+                        vendor = "壁仞科技"
+                        model_match = re.search(r'BR\d+', line, re.IGNORECASE)
+                        if model_match:
+                            model = model_match.group(0)
+                        else:
+                            model = "壁仞科技GPU"
+
+                    elif "ILUVATAR" in line_upper or "天数" in line:
+                        vendor = "天数智芯"
+                        model_match = re.search(r'BI\d+', line, re.IGNORECASE)
+                        if model_match:
+                            model = model_match.group(0)
+                        else:
+                            model = "天数智芯GPU"
+
+                    elif "MAXXIR" in line_upper or "沐曦" in line:
+                        vendor = "沐曦"
+                        model_match = re.search(r'[A-Z]\d+', line, re.IGNORECASE)
+                        if model_match:
+                            model = model_match.group(0)
+                        else:
+                            model = "沐曦GPU"
+
+                    elif "HYGON" in line_upper or "海光" in line:
+                        vendor = "海光"
+                        model = "海光GPU"
+
+                    # 注意：华为昇腾是NPU设备，不在GPGPU中显示，请在NPU信息中查看
+
+                    # 如果检测到国产GPU，添加到列表
+                    if vendor != "未知":
+                        gpu_id = line.split()[0] if line.split() else "未知"
+
                         # 尝试获取详细信息
+                        try:
+                            detail_result = subprocess.run(['lspci', '-v', '-s', gpu_id], capture_output=True, text=True, timeout=5)
+                            detail_output = detail_result.stdout
+
+                            # 尝试获取显存信息
+                            vram = "未知"
+                            vram_match = re.search(r'prefetchable.*size=\[(\d+[KMGT])\]', detail_output)
+                            if vram_match:
+                                vram = vram_match.group(1)
+
+                            gpu_info = {
+                                "厂商": vendor,
+                                "型号": model,
+                                "显存": vram,
+                                "设备ID": gpu_id,
+                                "类型": "GPGPU"
+                            }
+
+                            model_key = f"{vendor}-{model}-{gpu_id}"
+                            if model_key not in seen_models:
+                                gpus.append(gpu_info)
+                                seen_models.add(model_key)
+
+                        except subprocess.TimeoutExpired:
+                            pass
+
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # ============ 国际主流GPU检测 ============
+
+        # 方法7: 使用nvidia-smi (NVIDIA GPU)
+        try:
+            result = subprocess.run(['nvidia-smi', '--query-gpu=name,driver_version,memory.total', '--format=csv,noheader'],
+                                  capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                for line in lines:
+                    parts = [p.strip() for p in line.split(',')]
+                    if len(parts) >= 1:
+                        model_key = f"NVIDIA-{parts[0]}"
+                        if model_key not in seen_models:
+                            gpu = {
+                                "厂商": "NVIDIA",
+                                "型号": parts[0],
+                                "驱动版本": parts[1] if len(parts) > 1 else "未知",
+                                "显存": parts[2] if len(parts) > 2 else "未知",
+                                "类型": "GPU"
+                            }
+                            gpus.append(gpu)
+                            seen_models.add(model_key)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # 方法8: 使用rocm-smi (AMD GPU)
+        try:
+            result = subprocess.run(['rocm-smi', '--showproductname'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                for line in lines:
+                    if 'Card series' in line or 'GPU' in line:
+                        model = line.split(':')[-1].strip()
+                        model_key = f"AMD-{model}"
+                        if model_key not in seen_models:
+                            gpu = {
+                                "厂商": "AMD",
+                                "型号": model,
+                                "类型": "GPU"
+                            }
+                            gpus.append(gpu)
+                            seen_models.add(model_key)
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+
+        # 方法9: 使用lspci检测国际GPU (Linux)
+        try:
+            result = subprocess.run(['lspci', '-nn', '-d', '::0300'], capture_output=True, text=True, timeout=5)
+            if result.returncode == 0:
+                lines = result.stdout.strip().split('\n')
+                for line in lines:
+                    if 'VGA' in line or '3D' in line:
                         gpu_id = line.split()[0]
                         try:
                             detail_result = subprocess.run(['lspci', '-v', '-s', gpu_id], capture_output=True, text=True, timeout=5)
@@ -474,64 +722,33 @@ class HardwareInfoCollector:
                             elif "Intel" in model.upper():
                                 vendor = "Intel"
 
-                            # 尝试获取显存信息
-                            vram = "未知"
-                            vram_match = re.search(r'prefetchable.*size=\[(\d+[KMGT])\]', detail_output)
-                            if vram_match:
-                                vram = vram_match.group(1)
+                            # 只处理国际厂商，国产GPU已经在前面处理过
+                            if vendor in ["NVIDIA", "AMD", "Intel"]:
+                                # 尝试获取显存信息
+                                vram = "未知"
+                                vram_match = re.search(r'prefetchable.*size=\[(\d+[KMGT])\]', detail_output)
+                                if vram_match:
+                                    vram = vram_match.group(1)
 
-                            gpu = {
-                                "厂商": vendor,
-                                "型号": model,
-                                "显存": vram,
-                                "设备ID": gpu_id
-                            }
-                            gpus.append(gpu)
+                                gpu = {
+                                    "厂商": vendor,
+                                    "型号": model,
+                                    "显存": vram,
+                                    "设备ID": gpu_id,
+                                    "类型": "GPU"
+                                }
+
+                                model_key = f"{vendor}-{model}-{gpu_id}"
+                                if model_key not in seen_models:
+                                    gpus.append(gpu)
+                                    seen_models.add(model_key)
 
                         except subprocess.TimeoutExpired:
                             pass
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # 方法2: 使用nvidia-smi (NVIDIA GPU)
-        try:
-            result = subprocess.run(['nvidia-smi', '--query-gpu=name,driver_version,memory.total', '--format=csv,noheader'],
-                                  capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    parts = [p.strip() for p in line.split(',')]
-                    if len(parts) >= 2:
-                        gpu = {
-                            "厂商": "NVIDIA",
-                            "型号": parts[0],
-                            "驱动版本": parts[1] if len(parts) > 1 else "未知",
-                            "显存": parts[2] if len(parts) > 2 else "未知"
-                        }
-                        # 避免重复
-                        if not any(g["型号"] == gpu["型号"] for g in gpus):
-                            gpus.append(gpu)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # 方法3: 使用rocm-smi (AMD GPU)
-        try:
-            result = subprocess.run(['rocm-smi', '--showproductname'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                lines = result.stdout.strip().split('\n')
-                for line in lines:
-                    if 'Card series' in line or 'GPU' in line:
-                        model = line.split(':')[-1].strip()
-                        gpu = {
-                            "厂商": "AMD",
-                            "型号": model
-                        }
-                        if not any(g["型号"] == gpu["型号"] for g in gpus):
-                            gpus.append(gpu)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # 方法4: Windows下的查询
+        # 方法10: Windows下的查询
         if platform.system() == "Windows":
             try:
                 result = subprocess.run(
@@ -545,23 +762,41 @@ class HardwareInfoCollector:
                         if parts:
                             vendor = "未知"
                             model = parts[0]
-                            if "NVIDIA" in model.upper():
+
+                            if any(keyword in model.upper() for keyword in ["MOORE", "摩尔", "THREADS"]):
+                                vendor = "摩尔线程"
+                            elif any(keyword in model.upper() for keyword in ["BR", "BIREN", "壁仞"]):
+                                vendor = "壁仞科技"
+                            elif any(keyword in model.upper() for keyword in ["ILUVATAR", "天数"]):
+                                vendor = "天数智芯"
+                            elif any(keyword in model.upper() for keyword in ["MAXXIR", "沐曦"]):
+                                vendor = "沐曦"
+                            elif any(keyword in model.upper() for keyword in ["HYGON", "海光"]):
+                                vendor = "海光"
+                            # 注意：华为昇腾是NPU设备，不在GPGPU中显示，请在NPU信息中查看
+                            elif "NVIDIA" in model.upper():
                                 vendor = "NVIDIA"
                             elif "AMD" in model.upper():
                                 vendor = "AMD"
                             elif "Intel" in model.upper():
                                 vendor = "Intel"
 
+                            gpu_type = "GPGPU" if vendor in ["摩尔线程", "壁仞科技", "天数智芯", "沐曦", "海光"] else "GPU"
+
                             gpu = {
                                 "厂商": vendor,
-                                "型号": model
+                                "型号": model,
+                                "类型": gpu_type
                             }
-                            if not any(g["型号"] == gpu["型号"] for g in gpus):
+
+                            model_key = f"{vendor}-{model}"
+                            if model_key not in seen_models:
                                 gpus.append(gpu)
+                                seen_models.add(model_key)
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass
 
-        # 方法5: macOS下的查询
+        # 方法11: macOS下的查询
         if platform.system() == "Darwin":
             try:
                 result = subprocess.run(['system_profiler', 'SPDisplaysDataType'], capture_output=True, text=True, timeout=10)
@@ -569,12 +804,16 @@ class HardwareInfoCollector:
                     output = result.stdout
                     matches = re.findall(r'Chipset Model:\s*(.+)', output)
                     for model in matches:
-                        gpu = {
-                            "厂商": "Apple",
-                            "型号": model.strip()
-                        }
-                        if not any(g["型号"] == gpu["型号"] for g in gpus):
+                        model = model.strip()
+                        model_key = f"Apple-{model}"
+                        if model_key not in seen_models:
+                            gpu = {
+                                "厂商": "Apple",
+                                "型号": model,
+                                "类型": "GPU"
+                            }
                             gpus.append(gpu)
+                            seen_models.add(model_key)
             except (subprocess.TimeoutExpired, FileNotFoundError):
                 pass
 
@@ -587,110 +826,103 @@ class HardwareInfoCollector:
 
         npus = []
 
-        # 方法1: 查询华为昇腾NPU
+        # 方法: 使用npu-smi info查询华为昇腾NPU
         try:
-            result = subprocess.run(['npu-smi', 'info'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['npu-smi', 'info'], capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 output = result.stdout
-                # 解析npu-smi输出
-                npu_devices = re.findall(r'(\d+).*?Huawei.*?(\S+)', output)
-                for device_id, model in npu_devices:
-                    npu = {
-                        "厂商": "华为",
-                        "型号": model,
-                        "设备ID": device_id
-                    }
-                    npus.append(npu)
 
-                # 如果没有匹配到详细信息，至少确认存在NPU
-                if not npus and "Huawei" in output:
-                    npu = {
+                # 解析npu-smi info输出格式
+                # 示例输出:
+                # +------------------------------------------------------------------------------------------------+
+                # | npu-smi 24.1.rc2.1               Version: 24.1.rc2.1                                           |
+                # +---------------------------+---------------+----------------------------------------------------+
+                # | NPU   Name                | Health        | Power(W)    Temp(C)           Hugepages-Usage(page)|
+                # | Chip                      | Bus-Id        | AICore(%)   Memory-Usage(MB)  HBM-Usage(MB)        |
+                # +===========================+===============+====================================================+
+                # | 3     910B2               | OK            | 119.9       45                0    / 0             |
+                # | 0                         | 0000:02:00.0  | 9           0    / 0          61125/ 65536         |
+                # +===========================+===============+====================================================+
+                # | 4     910B2               | OK            | 116.1       45                0    / 0             |
+                # | 0                         | 0000:81:00.0  | 9           0    / 0          61120/ 65536         |
+                # +===========================+===============+====================================================+
+                # | 5     910B2               | OK            | 110.6       62                0    / 0             |
+                # | 0                         | 0000:41:00.0  | 5           0    / 0          61122/ 65536         |
+                # +===========================+===============+====================================================+
+                # | 6     910B2               | OK            | 109.9       45                0    / 0             |
+                # | 0                         | 0000:82:00.0  | 0           0    / 0          61123/ 65536         |
+                # +===========================+===============+====================================================+
+                # +---------------------------+---------------+----------------------------------------------------+
+                # | NPU     Chip              | Process id    | Process name             | Process memory(MB)      |
+                # +===========================+===============+====================================================+
+                # | 3       0                 | 6290          | VLLMWorker_TP            | 57776                   |
+                # +===========================+===============+====================================================+
+
+                lines = output.split('\n')
+                npu_data = {}
+                current_npu_id = None
+
+                for line in lines:
+                    line = line.strip()
+                    if not line or line.startswith('+') or line.startswith('| npu-smi'):
+                        continue
+
+                    # 匹配NPU信息行 (第一行数据)
+                    # | 3     910B2               | OK            | 119.9       45                0    / 0             |
+                    npu_match = re.match(r'\|\s*(\d+)\s+(\S+)\s+\|\s*(\w+)\s+\|\s*([\d.]+)\s+(\d+)\s+([\d/ ]+)\s*\|', line)
+                    if npu_match:
+                        current_npu_id = npu_match.group(1)
+                        npu_data[current_npu_id] = {
+                            "NPU ID": current_npu_id,
+                            "型号": npu_match.group(2),
+                            "健康状态": npu_match.group(3),
+                            "功耗": f"{npu_match.group(4)} W",
+                            "温度": f"{npu_match.group(5)} C",
+                            "Hugepages使用": npu_match.group(6),
+                            "厂商": "华为"
+                        }
+                        continue
+
+                    # 匹配Chip信息行 (第二行数据)
+                    # | 0                         | 0000:02:00.0  | 9           0    / 0          61125/ 65536         |
+                    if current_npu_id and current_npu_id in npu_data:
+                        chip_match = re.match(r'\|\s*(\d+)\s+\|\s*(\S+)\s+\|\s*(\d+)\s+([\d/ ]+)\s+([\d/ ]+)\s*\|', line)
+                        if chip_match:
+                            npu_data[current_npu_id].update({
+                                "Chip ID": chip_match.group(1),
+                                "Bus-Id": chip_match.group(2),
+                                "AICore使用率": f"{chip_match.group(3)}%",
+                                "Memory使用": chip_match.group(4),
+                                "HBM使用": chip_match.group(5)
+                            })
+                            current_npu_id = None  # 重置，准备下一个NPU
+
+                # 将解析的数据转换为列表
+                for npu_id, data in npu_data.items():
+                    npus.append(data)
+
+                # 如果解析失败但检测到华为NPU，返回基本信息
+                if not npus and ("Huawei" in output or "910" in output):
+                    npus.append({
                         "厂商": "华为",
                         "型号": "昇腾NPU",
                         "备注": "详细信息请使用npu-smi info查看"
-                    }
-                    npus.append(npu)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # 方法2: 查询特定设备文件 (华为昇腾)
-        try:
-            if os.path.exists('/dev/davinci0') or os.path.exists('/dev/davinci_manager'):
-                npu = {
-                    "厂商": "华为",
-                    "型号": "昇腾NPU (Davinci架构)",
-                    "设备路径": "/dev/davinci*"
-                }
-                if not any(n["型号"] == npu["型号"] for n in npus):
-                    npus.append(npu)
-        except:
-            pass
-
-        # 方法3: 查询百度昆仑NPU
-        try:
-            result = subprocess.run(['lsmod'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                if 'kunpeng' in result.stdout.lower() or 'kunlun' in result.stdout.lower():
-                    npu = {
-                        "厂商": "百度",
-                        "型号": "昆仑NPU"
-                    }
-                    npus.append(npu)
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-        # 方法4: 查询寒武纪NPU
-        try:
-            result = subprocess.run(['cnmon'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                output = result.stdout
-                if 'Cambricon' in output or '寒武纪' in output:
-                    npu = {
-                        "厂商": "寒武纪",
-                        "型号": "寒武纪NPU",
-                        "备注": "详细信息请使用cnmon查看"
-                    }
-                    npus.append(npu)
-        except (FileNotFoundError, subprocess.TimeoutExpired):
-            pass
-
-        # 方法5: 通过lspci查询NPU设备
-        try:
-            result = subprocess.run(['lspci', '-nn'], capture_output=True, text=True, timeout=5)
-            if result.returncode == 0:
-                output = result.stdout
-
-                # 华为昇腾
-                if 'Huawei' in output and ('NPU' in output or 'AI' in output):
-                    if not any(n["厂商"] == "华为" for n in npus):
-                        npu = {
-                            "厂商": "华为",
-                            "型号": "昇腾NPU"
-                        }
-                        npus.append(npu)
-
-                # 寒武纪
-                if 'Cambricon' in output or '寒武纪' in output:
-                    if not any(n["厂商"] == "寒武纪" for n in npus):
-                        npu = {
-                            "厂商": "寒武纪",
-                            "型号": "寒武纪NPU"
-                        }
-                        npus.append(npu)
+                    })
 
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # 方法6: 查询Google TPU
-        try:
-            if os.path.exists('/dev/accel0') or os.path.exists('/sys/devices/platform/tpu'):
-                npu = {
-                    "厂商": "Google",
-                    "型号": "TPU"
-                }
-                npus.append(npu)
-        except:
-            pass
+        # 备用方法: 查询特定设备文件 (华为昇腾)
+        if not npus:
+            try:
+                if os.path.exists('/dev/davinci0') or os.path.exists('/dev/davinci_manager'):
+                    npus.append({
+                        "厂商": "华为",
+                        "型号": "昇腾NPU (Davinci架构)",
+                        "设备路径": "/dev/davinci*"
+                    })
+            except:
+                pass
 
         self.npu_info = npus
         return npus
@@ -1106,15 +1338,25 @@ class HardwareInfoCollector:
         print()
 
         # GPU信息
-        print("【GPU信息】")
+        print("【GPU/GPGPU信息】")
         print("-" * 60)
         if info["GPU信息"]:
-            for i, gpu in enumerate(info["GPU信息"], 1):
-                print(f"GPU {i}:")
-                for key, value in gpu.items():
-                    print(f"  {key:15}: {value}")
+            # 按厂商分组显示
+            from collections import defaultdict
+            vendor_groups = defaultdict(list)
+            for gpu in info["GPU信息"]:
+                vendor = gpu.get("厂商", "未知")
+                vendor_groups[vendor].append(gpu)
+
+            for vendor, gpus in sorted(vendor_groups.items()):
+                print(f"{vendor}:")
+                for i, gpu in enumerate(gpus, 1):
+                    print(f"  设备 {i}:")
+                    for key, value in gpu.items():
+                        if key != "厂商":
+                            print(f"    {key:15}: {value}")
         else:
-            print("未检测到GPU设备")
+            print("未检测到GPU/GPGPU设备")
         print()
 
         # NPU信息
