@@ -552,23 +552,29 @@ class HardwareInfoCollector:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # 方法5: 海光 - 使用dcgmi
+        # 方法5: 海光 - 使用rocm-smi
         try:
-            result = subprocess.run(['dcgmi', 'diag', '-r'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['rocm-smi', '--showproductname'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 output = result.stdout
 
-                # 解析海光GPU信息
-                if "海光" in output or "Hygon" in output:
-                    model_key = "海光-GPGPU"
-                    if model_key not in seen_models:
-                        gpu = {
-                            "厂商": "海光",
-                            "型号": "海光GPGPU",
-                            "类型": "GPGPU"
-                        }
-                        gpus.append(gpu)
-                        seen_models.add(model_key)
+                # 解析海光DCU信息
+                # 匹配 Card Series: 后面的型号，如 K500SM_AI
+                model_pattern = re.compile(r'Card Series:\s*(.+?)(?:\n|$)', re.IGNORECASE)
+                models = model_pattern.findall(output)
+
+                for model in models:
+                    model = model.strip()
+                    if model and model not in ["", "N/A"]:
+                        model_key = f"海光-{model}"
+                        if model_key not in seen_models:
+                            gpu = {
+                                "厂商": "海光",
+                                "型号": model,
+                                "类型": "GPGPU"
+                            }
+                            gpus.append(gpu)
+                            seen_models.add(model_key)
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
@@ -623,7 +629,12 @@ class HardwareInfoCollector:
 
                     elif "HYGON" in line_upper or "海光" in line:
                         vendor = "海光"
-                        model = "海光GPU"
+                        # 海光DCU型号通常是 Kxxx 格式，如 K500SM_AI、K100 等
+                        model_match = re.search(r'K\d+[A-Z_]*', line, re.IGNORECASE)
+                        if model_match:
+                            model = model_match.group(0)
+                        else:
+                            model = "海光DCU"
 
                     # 注意：华为昇腾是NPU设备，不在GPGPU中显示，请在NPU信息中查看
 
