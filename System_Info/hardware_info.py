@@ -479,9 +479,9 @@ class HardwareInfoCollector:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # 方法2: 壁仞科技 - 使用br-smi
+        # 方法2: 壁仞科技 - 使用brsmi
         try:
-            result = subprocess.run(['br-smi', '-q'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['brsmi'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 output = result.stdout
 
@@ -503,16 +503,17 @@ class HardwareInfoCollector:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # 方法3: 沐曦 - 使用mx-smi或mx-smi info
+        # 方法3: 沐曦 - 使用mx-smi
         try:
             result = subprocess.run(['mx-smi'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 output = result.stdout
 
                 # 解析沐曦GPU信息
-                # 匹配类似 "C500" 等型号
-                model_pattern = re.compile(r'[A-Z]\d+', re.IGNORECASE)
-                models = model_pattern.findall(output)
+                # 匹配类似 "MXC500 VF"、"C500"、"N280" 等型号
+                # 要求至少2位数字，避免匹配到 python3.10 中的 n3
+                model_pattern = re.compile(r'\b(?:MXC|C|N)\d{2,}\b\s*(?:VF)?', re.IGNORECASE)
+                models = [m.strip() for m in model_pattern.findall(output)]
 
                 for model in models:
                     model_key = f"沐曦-{model}"
@@ -527,15 +528,15 @@ class HardwareInfoCollector:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # 方法4: 天数智芯 - 使用iluvatar-smi
+        # 方法4: 天数智芯 - 使用ixsmi
         try:
-            result = subprocess.run(['iluvatar-smi', '-q'], capture_output=True, text=True, timeout=5)
+            result = subprocess.run(['ixsmi'], capture_output=True, text=True, timeout=5)
             if result.returncode == 0:
                 output = result.stdout
 
                 # 解析天数智芯GPU信息
-                # 匹配类似 "BI150" 等型号
-                model_pattern = re.compile(r'BI\d+', re.IGNORECASE)
+                # 匹配类似 "Iluvatar BI-V100" 等型号
+                model_pattern = re.compile(r'Iluvatar\s+BI-V\d+', re.IGNORECASE)
                 models = model_pattern.findall(output)
 
                 for model in models:
@@ -601,7 +602,10 @@ class HardwareInfoCollector:
 
                     elif "ILUVATAR" in line_upper or "天数" in line:
                         vendor = "天数智芯"
-                        model_match = re.search(r'BI\d+', line, re.IGNORECASE)
+                        # 天数智芯型号通常是 Iluvatar BI-Vxxx 格式
+                        model_match = re.search(r'Iluvatar\s+BI-V\d+', line, re.IGNORECASE)
+                        if not model_match:
+                            model_match = re.search(r'BI-V\d+', line, re.IGNORECASE)
                         if model_match:
                             model = model_match.group(0)
                         else:
@@ -609,7 +613,9 @@ class HardwareInfoCollector:
 
                     elif "MAXXIR" in line_upper or "沐曦" in line:
                         vendor = "沐曦"
-                        model_match = re.search(r'[A-Z]\d+', line, re.IGNORECASE)
+                        # 沐曦型号通常是 MXC500 VF、C500、N280 等格式
+                        # 要求至少2位数字，避免匹配到错误文本
+                        model_match = re.search(r'\b(?:MXC|C|N)\d{2,}\b\s*(?:VF)?', line, re.IGNORECASE)
                         if model_match:
                             model = model_match.group(0)
                         else:
