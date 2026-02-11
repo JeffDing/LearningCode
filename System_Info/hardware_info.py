@@ -171,10 +171,133 @@ class HardwareInfoCollector:
                             info["厂商"] = "ARM"
                         elif "QUALCOMM" in model_upper:
                             info["厂商"] = "Qualcomm"
-                        elif "HUAWEI" in model_upper or "KUNPENG" in model_upper:
-                            info["厂商"] = "Huawei"
+                        # 国产CPU厂商识别
+                        elif "HUAWEI" in model_upper or "KUNPENG" in model_upper or "鲲鹏" in model or "海思" in model:
+                            info["厂商"] = "HiSilicon (海思)"
                         elif "PHYTEC" in model_upper:
                             info["厂商"] = "Phytec"
+                        elif "HYGON" in model_upper or "海光" in model:
+                            info["厂商"] = "Hygon (海光)"
+                        elif "ZHAOXIN" in model_upper or "兆芯" in model:
+                            info["厂商"] = "Zhaoxin (兆芯)"
+                        elif "CENTAUR" in model_upper or "VIA" in model_upper or "威盛" in model:
+                            info["厂商"] = "VIA (威盛)"
+                        elif "ALLWINNER" in model_upper or "全志" in model:
+                            info["厂商"] = "Allwinner (全志)"
+                        elif "ROCKCHIP" in model_upper or "RK" in model_upper or "瑞芯微" in model:
+                            info["厂商"] = "Rockchip (瑞芯微)"
+                        elif "SIFIVE" in model_upper:
+                            info["厂商"] = "SiFive"
+                        elif "Ampere" in model_upper:
+                            info["厂商"] = "Ampere"
+                        elif "Apple" in model_upper:
+                            info["厂商"] = "Apple"
+
+                    # 如果没有model name，尝试从CPU part字段提取（ARM架构）
+                    if info["型号"] == "未知":
+                        # 提取CPU implementer和part（ARM架构）
+                        implementer_match = re.search(r'CPU implementer\s*:\s*(.+)', cpuinfo)
+                        part_match = re.search(r'CPU part\s*:\s*(.+)', cpuinfo)
+
+                        if implementer_match and part_match:
+                            implementer = implementer_match.group(1).strip()
+                            part = part_match.group(1).strip()
+
+                            # ARM实现者代码映射
+                            implementer_map = {
+                                "0x41": "ARM",
+                                "0x42": "Broadcom",
+                                "0x43": "Cavium",
+                                "0x44": "DEC",
+                                "0x46": "Fujitsu",
+                                "0x48": "HiSilicon (海思)",
+                                "0x49": "Infineon",
+                                "0x4D": "Motorola/Freescale",
+                                "0x4E": "NVIDIA",
+                                "0x50": "APM",
+                                "0x51": "Qualcomm",
+                                "0x53": "Samsung",
+                                "0x56": "Marvell",
+                                "0x61": "Apple",
+                                "0x66": "Faraday",
+                                "0x69": "Intel",
+                                "0x70": "Phytium (飞腾)",
+                                "0xC0": "Ampere"
+                            }
+
+                            # CPU part代码映射（常见厂商）
+                            part_map = {
+                                # HiSilicon (海思)
+                                "0xd01": "Kunpeng 920 (鲲鹏920)",
+                                "0xd02": "Kunpeng 920 (鲲鹏920)",
+                                "0xd03": "Kunpeng 930 (鲲鹏930)",
+                                "0xd40": "Kunpeng 920 (鲲鹏920)",
+                                "0xd41": "Kunpeng 930 (鲲鹏930)",
+                                # Phytium (飞腾)
+                                "0xd18": "FT-2000/4",
+                                "0xd19": "FT-2000/64",
+                                "0xd1b": "FT-2000+",
+                                "0xd1c": "S2500",
+                                "0xd1d": "S5000",
+                                # ARM
+                                "0xd07": "Cortex-A57",
+                                "0xd08": "Cortex-A72",
+                                "0xd03": "Cortex-A53",
+                                "0xd04": "Cortex-A35",
+                                "0xd0b": "Cortex-A76",
+                                "0xd0c": "Cortex-A76AE",
+                                "0xd0d": "Cortex-A77",
+                                "0xd0e": "Cortex-A78",
+                                "0xd40": "Neoverse N1",
+                                "0xd41": "Cortex-A78",
+                                "0xd44": "Cortex-X1",
+                                "0xd47": "Cortex-A710",
+                                "0xd48": "Cortex-X2",
+                                "0xd49": "Neoverse N2",
+                                "0xd4a": "Neoverse E1",
+                                "0xd4b": "Cortex-A78C",
+                                "0xd4c": "Cortex-A715",
+                                "0xd4d": "Cortex-X3",
+                                # Apple
+                                "0x022": "M1",
+                                "0x023": "M1 Pro",
+                                "0x024": "M1 Max",
+                                "0x025": "M1 Ultra",
+                                "0x028": "M2",
+                                "0x029": "M2 Pro",
+                                "0x02a": "M2 Max",
+                                "0x02b": "M2 Ultra",
+                                # Qualcomm
+                                "0x800": "Kryo 200",
+                                "0x801": "Kryo 200",
+                                "0x802": "Kryo 300",
+                                "0x803": "Kryo 300",
+                                "0x804": "Kryo 385",
+                                "0x805": "Kryo 485",
+                                "0xc00": "Cortex-A53"
+                            }
+
+                            # 获取厂商和型号
+                            vendor = implementer_map.get(implementer.lower(), implementer)
+                            model = None
+
+                            # 优先使用part_map中的型号
+                            if part.lower() in part_map:
+                                model = part_map[part.lower()]
+                            else:
+                                # 尝试从implementer推断型号
+                                if implementer == "0x48":  # HiSilicon
+                                    model = f"HiSilicon ARMv8 (Part: {part})"
+                                elif implementer == "0x70":  # Phytium
+                                    model = f"Phytium (Part: {part})"
+                                else:
+                                    model = f"ARM (Implementer: {vendor}, Part: {part})"
+
+                            # 更新厂商和型号
+                            if info["厂商"] == "未知":
+                                info["厂商"] = vendor
+                            if model:
+                                info["型号"] = model
 
                     # 提取CPU频率
                     freq_match = re.search(r'cpu MHz\s*:\s*([\d.]+)', cpuinfo)
@@ -213,12 +336,35 @@ class HardwareInfoCollector:
                         vendor_match = re.search(r'Vendor ID:\s*(.+)', output)
                         if vendor_match:
                             vendor_id = vendor_match.group(1).strip()
+                            vendor_id_upper = vendor_id.upper()
+
+                            # 国际厂商
                             if vendor_id == "GenuineIntel":
                                 info["厂商"] = "Intel"
                             elif vendor_id == "AuthenticAMD":
                                 info["厂商"] = "AMD"
                             elif vendor_id == "ARM":
                                 info["厂商"] = "ARM"
+                            # 国产CPU厂商 - Vendor ID 通常就是厂商名称或缩写
+                            elif vendor_id_upper in ["CENTAUR", "VIA", "VIACOM"]:
+                                info["厂商"] = "VIA (威盛)"
+                            elif vendor_id_upper in ["HYGON", "海光"]:
+                                info["厂商"] = "Hygon (海光)"
+                            elif vendor_id_upper in ["ZHAOXIN", "兆芯"]:
+                                info["厂商"] = "Zhaoxin (兆芯)"
+                            elif vendor_id_upper in ["PHYTEC"]:
+                                info["厂商"] = "Phytec"
+                            elif vendor_id_upper in ["HUAWEI", "KUNPENG", "HI", "HISILICON", "海思"]:
+                                info["厂商"] = "HiSilicon (海思)"
+                            elif vendor_id_upper in ["ALLWINNER", "全志"]:
+                                info["厂商"] = "Allwinner (全志)"
+                            elif vendor_id_upper in ["ROCKCHIP", "RK"]:
+                                info["厂商"] = "Rockchip (瑞芯微)"
+                            elif vendor_id_upper in ["SIFIVE"]:
+                                info["厂商"] = "SiFive"
+                            # 如果是其他厂商，直接使用 Vendor ID 作为厂商名称
+                            else:
+                                info["厂商"] = vendor_id
 
                         # 提取型号
                         model_match = re.search(r'Model name:\s*(.+)', output)
@@ -261,6 +407,19 @@ class HardwareInfoCollector:
                                     info["厂商"] = "Intel"
                                 elif "AMD" in manufacturer:
                                     info["厂商"] = "AMD"
+                                # 国产CPU厂商
+                                elif "HYGON" in manufacturer or "海光" in manufacturer:
+                                    info["厂商"] = "Hygon (海光)"
+                                elif "ZHAOXIN" in manufacturer or "兆芯" in manufacturer:
+                                    info["厂商"] = "Zhaoxin (兆芯)"
+                                elif "CENTAUR" in manufacturer or "VIA" in manufacturer or "威盛" in manufacturer:
+                                    info["厂商"] = "VIA (威盛)"
+                                elif "HUAWEI" in manufacturer or "KUNPENG" in manufacturer or "HI" in manufacturer or "HISILICON" in manufacturer or "海思" in manufacturer:
+                                    info["厂商"] = "HiSilicon (海思)"
+                                elif "PHYTEC" in manufacturer:
+                                    info["厂商"] = "Phytec"
+                                else:
+                                    info["厂商"] = manufacturer_match.group(1).strip()
 
                         # 提取版本
                         version_match = re.search(r'Version:\s*(.+)', output)
