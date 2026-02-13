@@ -29,6 +29,197 @@ class HardwareInfoCollector:
         self.disk_info = []
         self.network_info = []
 
+    def _get_linux_distro(self) -> Dict[str, str]:
+        """获取Linux发行版信息"""
+        distro_info = {}
+
+        try:
+            # 方法1: 读取 /etc/os-release 文件（推荐方法，适用于大多数现代Linux发行版）
+            os_release_file = "/etc/os-release"
+            if os.path.exists(os_release_file):
+                with open(os_release_file, 'r') as f:
+                    content = f.read()
+
+                # 提取发行版信息
+                name_match = re.search(r'^NAME="?([^"\n]+)"?', content, re.MULTILINE)
+                if name_match:
+                    distro_info["发行版"] = name_match.group(1).strip()
+
+                version_match = re.search(r'^VERSION="?([^"\n]+)"?', content, re.MULTILINE)
+                if version_match:
+                    distro_info["版本"] = version_match.group(1).strip()
+
+                id_match = re.search(r'^ID="?([^"\n]+)"?', content, re.MULTILINE)
+                if id_match:
+                    distro_info["发行版ID"] = id_match.group(1).strip()
+
+                version_id_match = re.search(r'^VERSION_ID="?([^"\n]+)"?', content, re.MULTILINE)
+                if version_id_match:
+                    distro_info["版本ID"] = version_id_match.group(1).strip()
+
+                pretty_name_match = re.search(r'^PRETTY_NAME="?([^"\n]+)"?', content, re.MULTILINE)
+                if pretty_name_match:
+                    distro_info["完整名称"] = pretty_name_match.group(1).strip()
+
+                # 如果成功获取了信息，直接返回
+                if distro_info:
+                    return distro_info
+
+            # 方法2: 读取 /etc/lsb-release 文件（适用于Ubuntu、Debian等）
+            lsb_release_file = "/etc/lsb-release"
+            if os.path.exists(lsb_release_file):
+                with open(lsb_release_file, 'r') as f:
+                    content = f.read()
+
+                dist_match = re.search(r'^DISTRIB_ID="?([^"\n]+)"?', content, re.MULTILINE)
+                if dist_match:
+                    distro_info["发行版"] = dist_match.group(1).strip()
+
+                dist_desc_match = re.search(r'^DISTRIB_DESCRIPTION="?([^"\n]+)"?', content, re.MULTILINE)
+                if dist_desc_match:
+                    distro_info["完整名称"] = dist_desc_match.group(1).strip()
+
+                dist_release_match = re.search(r'^DISTRIB_RELEASE="?([^"\n]+)"?', content, re.MULTILINE)
+                if dist_release_match:
+                    distro_info["版本"] = dist_release_match.group(1).strip()
+
+                if distro_info:
+                    return distro_info
+
+            # 方法3: 读取 /etc/redhat-release 文件（适用于CentOS、RHEL、Fedora）
+            redhat_release_file = "/etc/redhat-release"
+            if os.path.exists(redhat_release_file):
+                with open(redhat_release_file, 'r') as f:
+                    release_info = f.read().strip()
+
+                distro_info["完整名称"] = release_info
+
+                # 尝试解析发行版名称和版本
+                if "CentOS" in release_info:
+                    distro_info["发行版"] = "CentOS"
+                    version_match = re.search(r'release (\d+\.?\d*)', release_info)
+                    if version_match:
+                        distro_info["版本"] = version_match.group(1)
+                elif "Red Hat Enterprise Linux" in release_info or "RHEL" in release_info:
+                    distro_info["发行版"] = "Red Hat Enterprise Linux"
+                    version_match = re.search(r'release (\d+\.?\d*)', release_info)
+                    if version_match:
+                        distro_info["版本"] = version_match.group(1)
+                elif "Fedora" in release_info:
+                    distro_info["发行版"] = "Fedora"
+                    version_match = re.search(r'release (\d+)', release_info)
+                    if version_match:
+                        distro_info["版本"] = version_match.group(1)
+
+                if distro_info:
+                    return distro_info
+
+            # 方法4: 读取 /etc/debian_version 文件（适用于Debian）
+            debian_version_file = "/etc/debian_version"
+            if os.path.exists(debian_version_file):
+                with open(debian_version_file, 'r') as f:
+                    version = f.read().strip()
+
+                distro_info["发行版"] = "Debian"
+                distro_info["版本"] = version
+
+            # 方法5: 读取 /etc/issue 文件（通用方法）
+            issue_file = "/etc/issue"
+            if os.path.exists(issue_file) and not distro_info:
+                with open(issue_file, 'r') as f:
+                    issue_content = f.read().strip().split('\n')[0]
+
+                distro_info["完整名称"] = issue_content
+
+                # 尝试识别常见发行版
+                issue_upper = issue_content.upper()
+                if "UBUNTU" in issue_upper:
+                    distro_info["发行版"] = "Ubuntu"
+                    version_match = re.search(r'(\d+\.\d+)', issue_content)
+                    if version_match:
+                        distro_info["版本"] = version_match.group(1)
+                elif "DEBIAN" in issue_upper:
+                    distro_info["发行版"] = "Debian"
+                elif "CENTOS" in issue_upper:
+                    distro_info["发行版"] = "CentOS"
+                elif "FEDORA" in issue_upper:
+                    distro_info["发行版"] = "Fedora"
+                elif "ARCH" in issue_upper:
+                    distro_info["发行版"] = "Arch Linux"
+                elif "SUSE" in issue_upper or "SLED" in issue_upper or "SLES" in issue_upper:
+                    distro_info["发行版"] = "openSUSE"
+                elif "ALPINE" in issue_upper:
+                    distro_info["发行版"] = "Alpine Linux"
+
+            # 方法6: 使用 lsb_release 命令（如果可用）
+            try:
+                result = subprocess.run(['lsb_release', '-a'], capture_output=True, text=True, timeout=5)
+                if result.returncode == 0:
+                    output = result.stdout
+
+                    dist_match = re.search(r'Distributor ID:\s*(.+)', output)
+                    if dist_match:
+                        distro_info["发行版"] = dist_match.group(1).strip()
+
+                    desc_match = re.search(r'Description:\s*(.+)', output)
+                    if desc_match:
+                        distro_info["完整名称"] = desc_match.group(1).strip()
+
+                    release_match = re.search(r'Release:\s*(.+)', output)
+                    if release_match:
+                        distro_info["版本"] = release_match.group(1).strip()
+
+                    if distro_info:
+                        return distro_info
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+            # 方法7: 尝试读取 /etc/system-release 文件（Amazon Linux等）
+            system_release_file = "/etc/system-release"
+            if os.path.exists(system_release_file):
+                with open(system_release_file, 'r') as f:
+                    release_info = f.read().strip()
+
+                distro_info["完整名称"] = release_info
+
+                if "Amazon Linux" in release_info:
+                    distro_info["发行版"] = "Amazon Linux"
+                    version_match = re.search(r'(\d+)', release_info)
+                    if version_match:
+                        distro_info["版本"] = version_match.group(1)
+
+            # 方法8: 读取 /etc/kylin-release 文件（麒麟系统）
+            kylin_release_file = "/etc/kylin-release"
+            if os.path.exists(kylin_release_file):
+                with open(kylin_release_file, 'r') as f:
+                    release_info = f.read().strip()
+
+                distro_info["完整名称"] = release_info
+                distro_info["发行版"] = "Kylin (麒麟)"
+
+            # 方法9: 读取 /etc/uos-release 文件（统信UOS）
+            uos_release_file = "/etc/uos-release"
+            if os.path.exists(uos_release_file):
+                with open(uos_release_file, 'r') as f:
+                    release_info = f.read().strip()
+
+                distro_info["完整名称"] = release_info
+                distro_info["发行版"] = "UOS (统信)"
+
+            # 方法10: 读取 /etc/deepin-release 文件（深度Deepin）
+            deepin_release_file = "/etc/deepin-release"
+            if os.path.exists(deepin_release_file):
+                with open(deepin_release_file, 'r') as f:
+                    release_info = f.read().strip()
+
+                distro_info["完整名称"] = release_info
+                distro_info["发行版"] = "Deepin (深度)"
+
+        except Exception as e:
+            print(f"获取Linux发行版信息时出错: {e}")
+
+        return distro_info
+
     def get_system_info(self) -> Dict[str, str]:
         """获取系统基本信息，包括厂商和型号"""
         print("正在获取系统基本信息...")
@@ -49,6 +240,11 @@ class HardwareInfoCollector:
         # 尝试获取更详细的系统信息
         try:
             if system == "Linux":
+                # 获取Linux发行版信息
+                distro_info = self._get_linux_distro()
+                if distro_info:
+                    info.update(distro_info)
+
                 # 读取DMI信息
                 dmi_files = {
                     "制造商": "/sys/class/dmi/id/sys_vendor",
