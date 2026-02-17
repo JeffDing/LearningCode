@@ -2,40 +2,50 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>计算器</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>华为计算器</title>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div class="calculator">
+        <div class="header">
+            <svg class="logo" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+                <path d="M50 5 L95 27.5 L95 72.5 L50 95 L5 72.5 L5 27.5 Z" fill="none" stroke="#ff6b00" stroke-width="3"/>
+                <path d="M50 15 L85 32.5 L85 67.5 L50 85 L15 67.5 L15 32.5 Z" fill="none" stroke="#ff6b00" stroke-width="2"/>
+                <path d="M50 25 L75 37.5 L75 62.5 L50 75 L25 62.5 L25 37.5 Z" fill="none" stroke="#ff6b00" stroke-width="1.5"/>
+                <circle cx="50" cy="50" r="8" fill="#ff6b00"/>
+            </svg>
+            <span class="brand">HUAWEI</span>
+        </div>
         <div class="display">
             <div class="expression" id="expression"></div>
             <div class="result" id="result">0</div>
         </div>
-        <div class="keyboard">
-            <button class="btn btn-function" data-action="clear">AC</button>
-            <button class="btn btn-function" data-action="backspace">⌫</button>
-            <button class="btn btn-function" data-action="percent">%</button>
-            <button class="btn btn-operator" data-action="operator" data-value="/">÷</button>
+        <div class="buttons">
+            <button class="btn function" data-action="clear">C</button>
+            <button class="btn function" data-action="backspace">⌫</button>
+            <button class="btn function" data-action="percent">%</button>
+            <button class="btn operator" data-action="operator" data-value="/">÷</button>
             
-            <button class="btn btn-number" data-action="number" data-value="7">7</button>
-            <button class="btn btn-number" data-action="number" data-value="8">8</button>
-            <button class="btn btn-number" data-action="number" data-value="9">9</button>
-            <button class="btn btn-operator" data-action="operator" data-value="*">×</button>
+            <button class="btn number" data-action="number" data-value="7">7</button>
+            <button class="btn number" data-action="number" data-value="8">8</button>
+            <button class="btn number" data-action="number" data-value="9">9</button>
+            <button class="btn operator" data-action="operator" data-value="*">×</button>
             
-            <button class="btn btn-number" data-action="number" data-value="4">4</button>
-            <button class="btn btn-number" data-action="number" data-value="5">5</button>
-            <button class="btn btn-number" data-action="number" data-value="6">6</button>
-            <button class="btn btn-operator" data-action="operator" data-value="-">−</button>
+            <button class="btn number" data-action="number" data-value="4">4</button>
+            <button class="btn number" data-action="number" data-value="5">5</button>
+            <button class="btn number" data-action="number" data-value="6">6</button>
+            <button class="btn operator" data-action="operator" data-value="-">-</button>
             
-            <button class="btn btn-number" data-action="number" data-value="1">1</button>
-            <button class="btn btn-number" data-action="number" data-value="2">2</button>
-            <button class="btn btn-number" data-action="number" data-value="3">3</button>
-            <button class="btn btn-operator" data-action="operator" data-value="+">+</button>
+            <button class="btn number" data-action="number" data-value="1">1</button>
+            <button class="btn number" data-action="number" data-value="2">2</button>
+            <button class="btn number" data-action="number" data-value="3">3</button>
+            <button class="btn operator" data-action="operator" data-value="+">+</button>
             
-            <button class="btn btn-number btn-zero" data-action="number" data-value="0">0</button>
-            <button class="btn btn-number" data-action="decimal">.</button>
-            <button class="btn btn-equals" data-action="equals">=</button>
+            <button class="btn number" data-action="negate">+/-</button>
+            <button class="btn number" data-action="number" data-value="0">0</button>
+            <button class="btn number" data-action="decimal">.</button>
+            <button class="btn operator" data-action="equals">=</button>
         </div>
     </div>
     <script src="script.js"></script>
