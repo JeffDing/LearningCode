@@ -3,10 +3,10 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
-def download_pdf(url, folder_path):
+def download_pdf(url, folder_path, headers=None):
     """下载 PDF 文件并保存到指定文件夹"""
     try:
-        response = requests.get(url, stream=True)
+        response = requests.get(url, headers=headers, stream=True)
         response.raise_for_status()
         
         # 从 URL 中提取文件名
@@ -23,6 +23,13 @@ def download_pdf(url, folder_path):
         
         print(f"已下载: {filename}")
         return True
+    except requests.exceptions.HTTPError as e:
+        code = e.response.status_code
+        if code == 404:
+            print(f"文件不存在，已跳过: {url}")
+        else:
+            print(f"下载失败 [{code}] {url}: {e}")
+        return False
     except Exception as e:
         print(f"下载失败 {url}: {e}")
         return False
@@ -35,7 +42,8 @@ def get_all_pdfs(url, folder_path='pdf_files'):
         
         # 获取网页内容
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            'Referer': url
         }
         response = requests.get(url, headers=headers)
         response.raise_for_status()
@@ -60,7 +68,7 @@ def get_all_pdfs(url, folder_path='pdf_files'):
         
         # 下载所有 PDF
         for pdf_url in pdf_links:
-            download_pdf(pdf_url, folder_path)
+            download_pdf(pdf_url, folder_path, headers)
             
         print("所有 PDF 文件下载完成！")
         
