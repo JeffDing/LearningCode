@@ -1193,43 +1193,23 @@ class HardwareInfoCollector:
         return gpus
 
     def get_npu_info(self) -> List[Dict[str, str]]:
-        """获取NPU信息"""
+        """获取NPU信息，支持华为昇腾910/950系列"""
         print("正在获取NPU信息...")
 
         npus = []
 
-        # 方法: 使用npu-smi info查询华为昇腾NPU
+        # ============ 方法1: 使用 npu-smi info 查询华为昇腾NPU ============
         try:
             result = subprocess.run(['npu-smi', 'info'], capture_output=True, text=True, timeout=10)
             if result.returncode == 0:
                 output = result.stdout
 
-                # 解析npu-smi info输出格式
-                # 示例输出:
-                # +------------------------------------------------------------------------------------------------+
-                # | npu-smi 24.1.rc2.1               Version: 24.1.rc2.1                                           |
-                # +---------------------------+---------------+----------------------------------------------------+
-                # | NPU   Name                | Health        | Power(W)    Temp(C)           Hugepages-Usage(page)|
-                # | Chip                      | Bus-Id        | AICore(%)   Memory-Usage(MB)  HBM-Usage(MB)        |
-                # +===========================+===============+====================================================+
-                # | 3     910B2               | OK            | 119.9       45                0    / 0             |
-                # | 0                         | 0000:02:00.0  | 9           0    / 0          61125/ 65536         |
-                # +===========================+===============+====================================================+
-                # | 4     910B2               | OK            | 116.1       45                0    / 0             |
-                # | 0                         | 0000:81:00.0  | 9           0    / 0          61120/ 65536         |
-                # +===========================+===============+====================================================+
-                # | 5     910B2               | OK            | 110.6       62                0    / 0             |
-                # | 0                         | 0000:41:00.0  | 5           0    / 0          61122/ 65536         |
-                # +===========================+===============+====================================================+
-                # | 6     910B2               | OK            | 109.9       45                0    / 0             |
-                # | 0                         | 0000:82:00.0  | 0           0    / 0          61123/ 65536         |
-                # +===========================+===============+====================================================+
-                # +---------------------------+---------------+----------------------------------------------------+
-                # | NPU     Chip              | Process id    | Process name             | Process memory(MB)      |
-                # +===========================+===============+====================================================+
-                # | 3       0                 | 6290          | VLLMWorker_TP            | 57776                   |
-                # +===========================+===============+====================================================+
-
+                # 解析npu-smi info输出（支持910和950系列）
+                # 950格式示例:
+                # | NPU ID | Name             | Health  | Power(W)  Temp(C)    Hugepages-Usage(page) |
+                # |        |                  | Bus-Id  | NPU Util  Memory-Usage  HBM-Usage             |
+                # | 0      | Ascend950PR      | OK      | 212.5     63           0     / 0             |
+                # |        |                  | 0000:57:00.0 | 0     0    / 0      117422/ 131072        |
                 lines = output.split('\n')
                 npu_data = {}
                 pending_npu = None
@@ -1240,9 +1220,11 @@ class HardwareInfoCollector:
                         continue
 
                     # 匹配NPU信息行 (第一行数据)
-                    # | 7     Ascend910           | OK            | 163.2       42                0    / 0             |
-                    # Power 列可能为 '-'，使用 [\d.\-]+ 支持
-                    npu_match = re.match(r'\|\s*(\d+)\s+(\S+)\s+\|\s*(\w+)\s+\|\s*([\d.\-]+)\s+(\d+)\s+([\d/ ]+)\s*\|', line)
+                    # 格式: | NPU_ID | Name | Health | Power | Temp | Hugepages-Used / Total |
+                    npu_match = re.match(
+                        r'\|\s*(\d+)\s*\|\s*(\S+)\s*\|\s*(\w+)\s+\|\s*([\d.\-]+)\s+(\d+)\s+(\d+)\s*/\s*(\d+)\s*\|',
+                        line
+                    )
                     if npu_match:
                         pending_npu = {
                             "NPU ID": npu_match.group(1),
@@ -1254,44 +1236,90 @@ class HardwareInfoCollector:
                         if power_val != '-':
                             pending_npu["功耗"] = f"{power_val} W"
                         pending_npu["温度"] = f"{npu_match.group(5)} C"
-                        pending_npu["Hugepages使用"] = npu_match.group(6)
+                        pending_npu["Hugepages使用"] = f"{npu_match.group(6)} / {npu_match.group(7)}"
                         continue
 
                     # 匹配Chip信息行 (第二行数据)
-                    # | 7     14                  | 0000:0B:00.0  | 0           0    / 0          3106 / 65536         |
-                    # 使用显式 \d+ / \d+ 模式避免 [\d/ ]+ 歧义
-                    # 注意：实际输出含 Phy-ID 列，格式为 | Chip Phy-ID | Bus-Id | ...
-                    # 使用 (NPU ID, Chip ID) 作为唯一键，910C 的 Chip 0/1 分别创建条目
-                    if pending_npu is not None:
-                        chip_match = re.match(r'\|\s*(\d+)\s+\d+\s+\|\s*(\S+)\s+\|\s*(\d+)\s+(\d+)\s*/\s*(\d+)\s+(\d+)\s*/\s*(\d+)\s*\|', line)
-                        if chip_match:
-                            chip_id = chip_match.group(1)
+                    # 910格式: | Chip Phy-ID | Bus-Id | AICore(%) | Mem-Used/Total | HBM-Used/Total |
+                    # 950格式: | ChipID | (空) | Bus-Id | NPU Util(%) | Mem-Used/Total | HBM-Used/Total |
+                    # 用分列方式解析，兼容两种格式
+                    if pending_npu is not None and '|' in line:
+                        parts = [p.strip() for p in line.split('|')]
+                        # 去掉首尾空列
+                        while parts and parts[0] == '':
+                            parts.pop(0)
+                        while parts and parts[-1] == '':
+                            parts.pop()
+
+                        # 找 Bus-Id (PCI地址格式 xxxx:xx:xx.x)
+                        bus_id = None
+                        bus_id_idx = None
+                        for idx, p in enumerate(parts):
+                            if re.match(r'\d{4}:[a-fA-F0-9]{2}:[a-fA-F0-9]{2}\.\d', p):
+                                bus_id = p
+                                bus_id_idx = idx
+                                break
+
+                        if bus_id is not None:
+                            # Chip ID: 从 Bus-Id 前面的非空列提取
+                            chip_id = ''
+                            for p in parts[:bus_id_idx]:
+                                if p:
+                                    m = re.match(r'(\d+)', p)
+                                    if m:
+                                        chip_id = m.group(1)
+                                    break
+                            # 950格式 Bus-Id 前为空列，用 NPU ID 作为 Chip ID
+                            if not chip_id:
+                                chip_id = pending_npu.get("NPU ID", "0")
+
+                            # Bus-Id 后面的列解析
+                            # 910: [NPU Util, Memory-Used/Total, HBM-Used/Total] 各占一列
+                            # 950单卡: [NPUUtil Memory-Used/Total HBM-Used/Total] 在同一列空格分隔
+                            after_bus = parts[bus_id_idx + 1:]
+                            if len(after_bus) == 1:
+                                # 950单卡格式：从单个空格分隔的字符串中提取
+                                text = after_bus[0]
+                                first_num = re.match(r'\s*(\d+)', text)
+                                npu_util = first_num.group(1) if first_num else '0'
+                                # 找到两个 "数字 / 数字" 模式
+                                slash_matches = re.findall(r'(\d+)\s*/\s*(\d+)', text)
+                                memory_str = f'{slash_matches[0][0]} / {slash_matches[0][1]}' if len(slash_matches) > 0 else '0 / 0'
+                                hbm_str = f'{slash_matches[1][0]} / {slash_matches[1][1]}' if len(slash_matches) > 1 else '0 / 0'
+                            else:
+                                # 910/950多卡格式：每列独立
+                                npu_util = after_bus[0].rstrip('%') if len(after_bus) > 0 else '0'
+                                memory_str = after_bus[1] if len(after_bus) > 1 else '0 / 0'
+                                hbm_str = after_bus[2] if len(after_bus) > 2 else '0 / 0'
+
                             unique_key = f"{pending_npu['NPU ID']}_{chip_id}"
                             if unique_key not in npu_data:
                                 npu_entry = dict(pending_npu)
                                 npu_entry["Chip ID"] = chip_id
-                                npu_entry["Bus-Id"] = chip_match.group(2)
-                                npu_entry["AICore使用率"] = f"{chip_match.group(3)}%"
-                                npu_entry["Memory使用"] = f"{chip_match.group(4)} / {chip_match.group(5)}"
-                                npu_entry["HBM使用"] = f"{chip_match.group(6)} / {chip_match.group(7)}"
-                                # 提取总显存大小
-                                try:
-                                    total_hbm_mb = int(chip_match.group(7))
-                                    if total_hbm_mb >= 1024:
-                                        npu_entry["显存"] = f"{total_hbm_mb / 1024:.0f} GB"
-                                    else:
-                                        npu_entry["显存"] = f"{total_hbm_mb} MB"
-                                except ValueError:
-                                    pass
+                                npu_entry["Bus-Id"] = bus_id
+                                npu_entry["AICore使用率"] = f"{npu_util}%"
+                                npu_entry["Memory使用"] = memory_str
+                                npu_entry["HBM使用"] = hbm_str
+                                # 提取总HBM大小
+                                hbm_total_match = re.search(r'(\d+)\s*/\s*(\d+)', hbm_str)
+                                if hbm_total_match:
+                                    try:
+                                        total_hbm_mb = int(hbm_total_match.group(2))
+                                        if total_hbm_mb >= 1024:
+                                            npu_entry["显存"] = f"{total_hbm_mb / 1024:.0f} GB"
+                                        else:
+                                            npu_entry["显存"] = f"{total_hbm_mb} MB"
+                                    except ValueError:
+                                        pass
                                 npu_data[unique_key] = npu_entry
-                            pending_npu = None  # 重置，准备下一个NPU
+                            # 不重置 pending_npu，允许多 chip 行（如910C/950C）
 
                 # 将解析的数据转换为列表
                 for unique_key, data in npu_data.items():
                     npus.append(data)
 
-                # 如果解析失败但检测到华为NPU，返回基本信息
-                if not npus and ("Huawei" in output or "910" in output):
+                # 如果主解析失败但检测到华为NPU，返回基本信息
+                if not npus and ("Huawei" in output or "Ascend" in output or "910" in output or "950" in output):
                     npus.append({
                         "厂商": "华为",
                         "型号": "昇腾NPU",
@@ -1301,16 +1329,113 @@ class HardwareInfoCollector:
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
 
-        # 备用方法: 查询特定设备文件 (华为昇腾)
+        # ============ 方法2: 使用 npu-smi info -t board 获取板卡详细信息（备用） ============
+        if not npus:
+            try:
+                result = subprocess.run(['npu-smi', 'info', '-t', 'board'], capture_output=True, text=True, timeout=10)
+                if result.returncode == 0:
+                    output = result.stdout
+                    chip_type_match = re.search(r'Chip\s*Type[：:]\s*(\S+)', output, re.IGNORECASE)
+                    hbm_match = re.search(r'HBM\s*(?:Capacity|Size|Mem)[：:\s]*(\d+)\s*(?:MB|GB)?', output, re.IGNORECASE)
+
+                    model = "昇腾NPU"
+                    if chip_type_match:
+                        model = chip_type_match.group(1)
+                    elif "950" in output:
+                        model = "Ascend950"
+                    elif "910" in output:
+                        model = "Ascend910"
+
+                    hbm_size = ""
+                    if hbm_match:
+                        hbm_val = hbm_match.group(1)
+                        try:
+                            hbm_mb = int(hbm_val)
+                            if hbm_mb >= 1024:
+                                hbm_size = f"{hbm_mb / 1024:.0f} GB"
+                            else:
+                                hbm_size = f"{hbm_mb} MB"
+                        except ValueError:
+                            hbm_size = hbm_val
+
+                    entry = {"厂商": "华为", "型号": model}
+                    if hbm_size:
+                        entry["显存"] = hbm_size
+                    npus.append(entry)
+
+            except (FileNotFoundError, subprocess.TimeoutExpired):
+                pass
+
+        # ============ 方法3: 备用方法 - 查询特定设备文件 (华为昇腾) ============
         if not npus:
             try:
                 if os.path.exists('/dev/davinci0') or os.path.exists('/dev/davinci_manager'):
-                    npus.append({
+                    npu_entry = {
                         "厂商": "华为",
                         "型号": "昇腾NPU (Davinci架构)",
                         "设备路径": "/dev/davinci*"
-                    })
-            except:
+                    }
+
+                    # 尝试从 sysfs 获取更详细的型号信息
+                    try:
+                        for davinci_path in ['/sys/devices/davinci0', '/sys/class/davinci']:
+                            if os.path.exists(davinci_path):
+                                for root, dirs, files in os.walk(davinci_path):
+                                    for fname in files:
+                                        if 'model' in fname.lower() or 'name' in fname.lower():
+                                            fpath = os.path.join(root, fname)
+                                            try:
+                                                with open(fpath, 'r') as f:
+                                                    val = f.read().strip()
+                                                if val and ('ascend' in val.lower() or '950' in val or '910' in val):
+                                                    npu_entry["型号"] = val
+                                            except (IOError, OSError):
+                                                pass
+                                    break
+                    except (IOError, OSError):
+                        pass
+
+                    npus.append(npu_entry)
+
+            except Exception:
+                pass
+
+        self.npu_info = npus
+        return npus
+
+        # ============ 方法3: 备用方法 - 查询特定设备文件 (华为昇腾) ============
+        if not npus:
+            try:
+                if os.path.exists('/dev/davinci0') or os.path.exists('/dev/davinci_manager'):
+                    npu_entry = {
+                        "厂商": "华为",
+                        "型号": "昇腾NPU (Davinci架构)",
+                        "设备路径": "/dev/davinci*"
+                    }
+
+                    # 尝试从 sysfs 获取更详细的型号信息
+                    try:
+                        for davinci_path in ['/sys/devices/davinci0', '/sys/class/davinci']:
+                            if os.path.exists(davinci_path):
+                                # 查找型号信息
+                                for root, dirs, files in os.walk(davinci_path):
+                                    for fname in files:
+                                        if 'model' in fname.lower() or 'name' in fname.lower():
+                                            fpath = os.path.join(root, fname)
+                                            try:
+                                                with open(fpath, 'r') as f:
+                                                    val = f.read().strip()
+                                                if val and ('ascend' in val.lower() or '950' in val or '910' in val):
+                                                    npu_entry["型号"] = val
+                                            except (IOError, OSError):
+                                                pass
+                                    break  # 只查第一层
+                    except (IOError, OSError):
+                        pass
+
+                    npus.append(npu_entry)
+
+            except Exception:
                 pass
 
         self.npu_info = npus
