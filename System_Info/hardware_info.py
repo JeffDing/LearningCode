@@ -12,6 +12,7 @@ import json
 import socket
 import os
 import requests
+import time
 from typing import Dict, List, Optional, Any
 import psutil
 import sys
@@ -870,6 +871,67 @@ class HardwareInfoCollector:
                 model_pattern = re.compile(r'\b(?:MXC|C|N)\d{2,}\b\s*(?:VF)?', re.IGNORECASE)
                 models = [m.strip() for m in model_pattern.findall(output)]
 
+                # 尝试获取更详细的信息 - 解析mx-smi输出
+                gpu_details = {}
+                try:
+                    # 直接解析mx-smi输出（不带参数）
+                    detail_result = subprocess.run(['mx-smi'], capture_output=True, text=True, timeout=5)
+                    if detail_result.returncode == 0:
+                        detail_output = detail_result.stdout
+
+                        # 解析显存信息 - 格式: "858/65536 MiB"
+                        mem_match = re.search(r'(\d+)\s*/\s*(\d+)\s*MiB', detail_output)
+                        if mem_match:
+                            mem_used = int(mem_match.group(1))
+                            mem_total = int(mem_match.group(2))
+                            if mem_total >= 1024:
+                                gpu_details["显存"] = f"{mem_total/1024:.0f} GB ({mem_used} MiB已使用)"
+                            else:
+                                gpu_details["显存"] = f"{mem_total} MB"
+
+                        # 解析温度 - 格式: "46C"
+                        temp_match = re.search(r'\|\s*(\d+)C\s+', detail_output)
+                        if temp_match:
+                            gpu_details["温度"] = f"{temp_match.group(1)}°C"
+
+                        # 解析功耗 - 格式: "58W / 350W"
+                        power_match = re.search(r'(\d+)W\s*/\s*(\d+)W', detail_output)
+                        if power_match:
+                            gpu_details["功耗"] = f"{power_match.group(1)} W"
+                            gpu_details["功耗上限"] = f"{power_match.group(2)} W"
+
+                        # 解析GPU利用率 - 格式: "0%"
+                        util_match = re.search(r'\|\s*(\d+)%\s+', detail_output)
+                        if util_match:
+                            gpu_details["利用率"] = f"{util_match.group(1)}%"
+
+                        # 解析驱动版本 - 格式: "Kernel Mode Driver Version: 3.4.4"
+                        driver_match = re.search(r'Kernel Mode Driver Version:\s*([\d.]+)', detail_output)
+                        if driver_match:
+                            gpu_details["驱动版本"] = driver_match.group(1)
+
+                        # 解析BIOS版本 - 格式: "BIOS Version: 1.24.3.0"
+                        bios_match = re.search(r'BIOS Version:\s*([\d.]+)', detail_output)
+                        if bios_match:
+                            gpu_details["BIOS版本"] = bios_match.group(1)
+
+                        # 解析MACA版本
+                        maca_match = re.search(r'MACA Version:\s*([\d.]+)', detail_output)
+                        if maca_match:
+                            gpu_details["MACA版本"] = maca_match.group(1)
+
+                        # 解析性能状态 - 格式: "P0"
+                        perf_match = re.search(r'\|\s*(P\d+)\s+\|', detail_output)
+                        if perf_match:
+                            gpu_details["性能状态"] = perf_match.group(1)
+
+                        # 解析GPU名称 - 格式: "MetaX C500"
+                        name_match = re.search(r'MetaX\s+(C\d+)', detail_output)
+                        if name_match:
+                            gpu_details["完整型号"] = f"MetaX {name_match.group(1)}"
+                except (FileNotFoundError, subprocess.TimeoutExpired):
+                    pass
+
                 for model in models:
                     model_key = f"沐曦-{model}"
                     if model_key not in seen_models:
@@ -878,6 +940,8 @@ class HardwareInfoCollector:
                             "型号": model,
                             "类型": "GPGPU"
                         }
+                        # 添加详细信息
+                        gpu.update(gpu_details)
                         gpus.append(gpu)
                         seen_models.add(model_key)
         except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -1950,6 +2014,65 @@ class HardwareInfoCollector:
         except Exception as e:
             print(f"保存JSON文件时出错: {e}")
 
+    def save_to_markdown(self, filename: str = "hardware_info.md"):
+        """将硬件信息保存为Markdown文件"""
+        info = {
+            "系统信息": self.system_info,
+            "CPU信息": self.cpu_info,
+            "外网IP信息": self.ip_info,
+            "GPU信息": self.gpu_info,
+            "NPU信息": self.npu_info,
+            "内存信息": self.memory_info,
+            "硬盘信息": self.disk_info,
+            "网卡信息": self.network_info
+        }
+
+        try:
+            with open(filename, 'w', encoding='utf-8') as f:
+                f.write("# 硬件信息报告\n\n")
+                f.write("> 生成时间: {}\n\n".format(time.strftime("%Y-%m-%d %H:%M:%S")))
+
+                for section, data in info.items():
+                    f.write("## {}\n\n".format(section))
+
+                    if isinstance(data, dict):
+                        f.write("| 属性 | 值 |\n")
+                        f.write("|------|-----|\n")
+                        for key, value in data.items():
+                            if isinstance(value, dict):
+                                f.write("| **{}** | {} |\n".format(key, json.dumps(value, ensure_ascii=False)))
+                            elif isinstance(value, list):
+                                f.write("| **{}** | {} |\n".format(key, ", ".join([str(v) for v in value])))
+                            else:
+                                f.write("| **{}** | {} |\n".format(key, value))
+                    elif isinstance(data, list) and data:
+                        if isinstance(data[0], dict):
+                            # 对于GPU/NPU等设备列表，使用更清晰的显示格式
+                            for i, item in enumerate(data, 1):
+                                vendor = item.get("厂商", "未知")
+                                model = item.get("型号", "未知")
+                                f.write("### 设备 {}: {} - {}\n\n".format(i, vendor, model))
+                                f.write("| 属性 | 值 |\n")
+                                f.write("|------|-----|\n")
+                                for key, value in item.items():
+                                    if key not in ["厂商", "型号"]:
+                                        f.write("| **{}** | {} |\n".format(key, value))
+                                f.write("\n")
+                        else:
+                            for item in data:
+                                f.write("- {}\n".format(item))
+                    else:
+                        f.write("*无数据*\n\n")
+
+                    f.write("\n")
+
+                f.write("---\n")
+                f.write("*报告生成时间: {}*\n".format(time.strftime("%Y-%m-%d %H:%M:%S")))
+
+            print(f"\n硬件信息已保存到: {filename}")
+        except Exception as e:
+            print(f"保存Markdown文件时出错: {e}")
+
 
 def main():
     """主函数"""
@@ -1963,8 +2086,8 @@ def main():
         # 打印信息
         collector.print_info(all_info)
 
-        # 保存为JSON文件
-        collector.save_to_json()
+        # 保存为Markdown文件
+        collector.save_to_markdown()
 
         print("\n注意: 某些信息可能需要管理员/root权限才能获取完整详情")
         print("如果NPU/GPU信息显示不完整，请尝试使用sudo权限运行此脚本")
