@@ -1,38 +1,60 @@
 import os
+import time
+import random
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin, urlparse
 
-def download_pdf(url, folder_path, headers=None):
+def download_pdf(url, folder_path, headers=None, max_retries=3, retry_delay=5):
     """下载 PDF 文件并保存到指定文件夹"""
-    try:
-        response = requests.get(url, headers=headers, stream=True)
-        response.raise_for_status()
-        
-        # 从 URL 中提取文件名
-        filename = os.path.basename(urlparse(url).path)
-        if not filename.lower().endswith('.pdf'):
-            filename += '.pdf'
+    for attempt in range(max_retries):
+        try:
+            response = requests.get(url, headers=headers, stream=True, timeout=30)
+            response.raise_for_status()
             
-        file_path = os.path.join(folder_path, filename)
-        
-        # 保存文件
-        with open(file_path, 'wb') as f:
-            for chunk in response.iter_content(1024):
-                f.write(chunk)
-        
-        print(f"已下载: {filename}")
-        return True
-    except requests.exceptions.HTTPError as e:
-        code = e.response.status_code
-        if code == 404:
-            print(f"文件不存在，已跳过: {url}")
-        else:
-            print(f"下载失败 [{code}] {url}: {e}")
-        return False
-    except Exception as e:
-        print(f"下载失败 {url}: {e}")
-        return False
+            # 从 URL 中提取文件名
+            filename = os.path.basename(urlparse(url).path)
+            if not filename.lower().endswith('.pdf'):
+                filename += '.pdf'
+                
+            file_path = os.path.join(folder_path, filename)
+            
+            # 保存文件
+            with open(file_path, 'wb') as f:
+                for chunk in response.iter_content(1024):
+                    f.write(chunk)
+            
+            print(f"已下载: {filename}")
+            return True
+        except requests.exceptions.HTTPError as e:
+            code = e.response.status_code
+            if code == 404:
+                print(f"文件不存在，已跳过: {url}")
+                return False
+            elif code == 429:
+                # 429 限流错误，等待后重试
+                if attempt < max_retries - 1:
+                    wait_time = retry_delay * (2 ** attempt) + random.uniform(1, 3)
+                    print(f"触发429限流，第{attempt + 1}次重试，等待{wait_time:.1f}秒...")
+                    time.sleep(wait_time)
+                else:
+                    print(f"下载失败 [429] {url}: 重试次数已用尽")
+                    return False
+            else:
+                print(f"下载失败 [{code}] {url}: {e}")
+                return False
+        except requests.exceptions.Timeout:
+            if attempt < max_retries - 1:
+                wait_time = retry_delay * (2 ** attempt) + random.uniform(1, 3)
+                print(f"请求超时，第{attempt + 1}次重试，等待{wait_time:.1f}秒...")
+                time.sleep(wait_time)
+            else:
+                print(f"下载失败 {url}: 请求超时")
+                return False
+        except Exception as e:
+            print(f"下载失败 {url}: {e}")
+            return False
+    return False
 
 def get_all_pdfs(url, folder_path='pdf_files'):
     """获取网页中所有的 PDF 文件链接并下载"""
@@ -67,9 +89,13 @@ def get_all_pdfs(url, folder_path='pdf_files'):
             print(pdf_url)
         
         # 下载所有 PDF
-        for pdf_url in pdf_links:
+        for i, pdf_url in enumerate(pdf_links):
             download_pdf(pdf_url, folder_path, headers)
-            
+            # 在请求之间添加随机延迟，避免触发429限流
+            if i < len(pdf_links) - 1:
+                delay = random.uniform(2, 5)
+                time.sleep(delay)
+        
         print("所有 PDF 文件下载完成！")
         
     except Exception as e:
@@ -79,4 +105,4 @@ if __name__ == "__main__":
     # 使用示例
     target_url = input("请输入要爬取的网页URL: ").strip()
     folder_path = input("请输入文件夹名字:").strip()
-    get_all_pdfs(target_url,folder_path)
+    get_all_pdfs(target_url, folder_path)
